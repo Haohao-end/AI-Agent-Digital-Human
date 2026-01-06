@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>My avatar</title>
+    <style>
+        video {
+            background: #222;
+            margin:0 0  20px 0;
+            --width:100%;
+            width:var(--width);
+            height:calc(var(--width)*0.75)
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@latest/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js">
+    </script>
+  </head>
+  <body>
+    <script>
+        var SpeechSDK;
+        var peerConnection;
+        var cogSvcRegin ="westus2";
+        var subscriptionKey = "f5e43ff";
+        var speakerHandel = function(avatarSynthesizer,msg,qingxu){
+            var yinse = document.getElementById("voiceSelect").value;
+            var spokenSsml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='zh-CN'>
+                <voice name='${yinse}'>
+                    <mstts:express-as style='${qingxu}' role='YoungAdultFemale' styledegreee='2'>${msg}</mstts:express-as>
+                </voice></speak>`;
+            avatarSynthesizer.speakSsmlAsync(spokenSsml).then((r)=>{
+                console.log("speakSsmlAsync result: "+r);
+                if(r.reason === SpeechSDK.ResultReason.SynthesizingAudioCompleted){
+                    console.log("speakSsmlAsync completed!");
+                }else{
+                    console.log("speakSsmlAsync failed: "+r.errorDetails);
+                    if(r.reason === SpeechSDK.ResultReason.Canceled){
+                       var cancellationDetails = SpeechSDK.CancellationDetails.fromResult(r);
+                       consonle.log(cancellationDetails.reason)
+                       if(cancellationDetails.reason === SpeechSDK.CancellationReason.Error){
+                           console.error("speakSsmlAsync error: "+cancellationDetails.errorDetails)
+                       }
+                    }
+                }
+            }).catch((e)=>{
+                console.log("speakSsmlAsync failed: "+e);
+                avatarSynthesizer.close();
+            });
+        }
+        var chatWithAI = function(avatarSynthesizer){
+            var chatInput = document.getElementById("chatInput");
+            var chatText = chatInput.value;
+            console.log("输入的文本："+chatText);
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST",`http://0.0.0.0:8000/chat?query=${chatText}`);
+            xhr.addEventListener("readystatechange",function(){
+                if(this.readyState === 4){
+                    var responseData = JSON.parse(this.responseText);
+                    console.log("AI返回的文本："+responseData);
+                    speakerHandel(avatarSynthesizer,responseData[0].msg,responseData[0].qingxu);
+                }
+            });
+            xhr.send();
+        }
+        document.addEventListener("DOMContentLoaded",function(){
+            var speechConfing =  SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey,cogSvcRegin);
+            //设置发音人
+            speechConfing.speechSynthesisVoiceName = "zh-CN-XiaoxiaoNeural";
+            var videoFormat = new SpeechSDK.AvatarVideoFormat();
+            var avatarConfig = new SpeechSDK.AvatarConfig(
+                "lisa",
+                "casual-sitting",
+                videoFormat,
+            )
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET",`https://${cogSvcRegin}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1`)
+            xhr.setRequestHeader("Ocp-Apim-Subscription-Key", subscriptionKey);
+            xhr.addEventListener("readystatechange",function(){
+                if (this.readyState === 4){
+                    var responseData = JSON.parse(this.responseText);
+                    var iceServerUrl = responseData.Urls[0]
+                    var iceServerUsername = responseData.Username;
+                    var iceServerCredential = responseData.Password;
+                    //创建WebRTC连接
+                    console.log("creating WebRTC connection");
+                    console.log("ice server url: "+iceServerUrl);
+                    console.log("ice server username: "+iceServerUsername);
+                    console.log("ice server credential: "+iceServerCredential);
+                    peerConnection = new RTCPeerConnection({
+                        iceServers: [
+                            {
+                                urls: [iceServerUrl],
+                                username: iceServerUsername,
+                                credential: iceServerCredential
+                            }
+                        ]
+                    });
+                //抓取webtrc
+                peerConnection.ontrack = function(event){
+                    if(event.track.kind === "video"){
+                        console.log("avatar video track received");
+                        var videoElement = document.createElement("video");
+                        videoElement.srcObject = event.streams[0];
+                        videoElement.autoplay = true;
+                        videoElement.id = "videoPlayer";
+                        videoElement.muted = true;
+                        videoElement.playsInline = true;
+                        document.body.appendChild(videoElement);
+                    }
+
+                    if(event.track.kind==="audio"){
+                        console.log("avatar audio track received");
+                        var  audioElement = document.createElement("audio");
+                        audioElement.srcObject = event.streams[0];
+                        audioElement.autoplay = true;
+                        audioElement.id = "audioPlayer";
+                        audioElement.muted = true;
+                        document.body.appendChild(audioElement);
+                    }
+                }
+                //webtrc连接状态
+                peerConnection.oniceconnectionstatechange = function(){
+                    console.log("avatar ice connection state changed to "+peerConnection.iceConnectionState);
+                    if(peerConnection.iceConnectionState === "connected"){
+                        console.log("avatar connected");
+                    }
+                    if(peerConnection.iceConnectionState === "disconnected" || peerConnection.iceConnectionState === "failed" || peerConnection.iceConnectionState === "closed"){
+                        console.log("avatar disconnected");
+                    }
+                }
+                //创建音频流
+                peerConnection.addTransceiver("video",{direction:"sendrecv"});
+                peerConnection.addTransceiver("audio",{direction:"sendrecv"});
+                //合成
+                var avatarSynthesizer = new SpeechSDK.AvatarSynthesizer(speechConfing,avatarConfig);
+
+                //开始合成
+                avatarSynthesizer.startAvatarAsync(peerConnection).then((r)=>{
+                    console.log("Avatar started ID:"+r.resultId)
+                    console.log("avatar started");
+                    //创建对话区域
+                    var chatInput = document.createElement("input");
+                    chatInput.type = "text";
+                    chatInput.placeholder = "Type your message here";
+                    chatInput.id = "chatInput";
+                    chatInput.style= "width:300px;height:50px;"
+                    document.body.appendChild(chatInput);
+                    //音色选择
+                    var voiceSelect = document.createElement("select");
+                    voiceSelect.id = "voiceSelect";
+                    voiceSelect.style = "width:100px;height:50px;"
+                    voiceSelect.innerHTML = `
+                        <option value="zh-HK-HiuMaanNeural">中文粤语</option>
+                        <option value="zh-TW-HsiaoChenNeural">中文台湾</option>
+                        <option value="zh-CN-shaanxi-XiaoniNeural">中文陕西话</option>
+                        <option value="zh-CN-liaoning-XiaobeiNeural">中文东北话</option>
+                        <option value="zh-CN-XiaomoNeural" selected>中文普通话</option>
+                        <option value="th-TH-PremwadeeNeural">泰语</option>    
+                    `;
+                    document.body.appendChild(voiceSelect);
+                    //发送按钮
+                    var sendButton = document.createElement("button");
+                    sendButton.innerHTML = "Send";
+                    sendButton.style = "width:100px;height:50px;"
+                    document.body.appendChild(sendButton);
+                    //发送按钮事件
+                    sendButton.addEventListener("click",function(){
+                        var videoPlayer = document.getElementById("videoPlayer");
+                        var audioPlayer = document.getElementById("audioPlayer");
+                        videoPlayer.muted = false;
+                        audioPlayer.muted = false;
+                        videoPlayer.play();
+                        audioPlayer.play();
+                        console.log("send button clicked");
+                        chatWithAI(avatarSynthesizer);
+                    })
+                }).catch((e)=>{
+                    console.error("avatar start failed: "+e);
+                })
+                }
+            });
+            xhr.send();
+            if(!!window.SpeechSDK){
+                SpeechSDK = window.SpeechSDK;
+            }
+        })
+    </script>
+  </body>
+</html>
