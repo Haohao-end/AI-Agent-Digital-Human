@@ -237,5 +237,3 @@ Please ensure compliance with Azure, OpenAI, and SerpAPI usage policies.
 
 AI Digital Human – Virtual Secretary (Lisa)
 Built with FastAPI, LangChain, Azure Speech, and WebRTC
-```
-```
