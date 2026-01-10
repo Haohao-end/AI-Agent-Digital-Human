@@ -1,6 +1,7 @@
 # AI Digital Human – Virtual Secretary (Lisa)
 
 ## Overview
+<img width="331" height="519" alt="image" src="https://github.com/user-attachments/assets/ac02be14-9b36-4337-9e7c-5e1cc751434e" />
 
 This project implements an **AI Digital Human (Avatar-based Virtual Secretary)** that combines:
 
